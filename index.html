@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CosmosBoard — NASA Space Intelligence Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #04060f;
+  --surface: #0a0e1f;
+  --surface2: #0f1428;
+  --border: #1e2a4a;
+  --accent: #4f8ef7;
+  --accent2: #7c5cfc;
+  --green: #22d3a5;
+  --red: #f75f5f;
+  --orange: #f7a24f;
+  --yellow: #f7e24f;
+  --text: #e8eaf6;
+  --muted: #6b7bb0;
+  --mono: 'DM Mono', monospace;
+  --sans: 'Inter', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); font-family: var(--sans); color: var(--text); min-height: 100vh; }
+
+/* STARS BG */
+body::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 30% 60%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 50% 10%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 80%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 40%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 20% 90%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 45% 45%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 55%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 65% 30%, rgba(255,255,255,0.4) 0%, transparent 100%);
+}
+
+/* TICKER */
+.ticker-wrap { background: linear-gradient(90deg, #1a0533, #0a1a4a, #1a0533); border-bottom: 1px solid var(--border); overflow: hidden; white-space: nowrap; padding: 7px 0; position: relative; z-index: 10; }
+.ticker-inner { display: inline-block; animation: ticker 40s linear infinite; }
+.ticker-inner span { color: #8899cc; font-family: var(--mono); font-size: 12px; padding: 0 28px; }
+.ticker-inner span b { color: var(--accent); }
+@keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+/* HEADER */
+header { background: rgba(10,14,31,0.95); border-bottom: 1px solid var(--border); padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; position: relative; z-index: 10; backdrop-filter: blur(12px); }
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon { font-size: 28px; }
+.logo-text { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.logo-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 1px; }
+.live-pill { background: rgba(34,211,165,0.1); color: var(--green); border: 1px solid rgba(34,211,165,0.3); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; font-family: var(--mono); display: none; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.btn-load { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; border: none; padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s; font-family: var(--sans); }
+.btn-load:hover { opacity: .85; }
+.btn-load:disabled { opacity: .5; pointer-events: none; }
+
+/* TABS */
+.tabs { background: rgba(10,14,31,0.9); border-bottom: 1px solid var(--border); padding: 0 28px; display: none; position: relative; z-index: 10; }
+.tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 12px 18px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--sans); transition: color .15s; }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* MAIN */
+.main { max-width: 1240px; margin: 0 auto; padding: 28px 20px 60px; position: relative; z-index: 1; }
+
+/* EMPTY STATE */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; gap: 20px; text-align: center; }
+.empty-icon { font-size: 72px; animation: float 3s ease-in-out infinite; }
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+.empty-title { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; background: linear-gradient(90deg, var(--accent), var(--accent2), var(--green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.empty-sub { color: var(--muted); font-size: 14px; max-width: 420px; line-height: 1.7; }
+
+/* LOADING */
+.loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; gap: 20px; }
+.orbit { width: 56px; height: 56px; position: relative; }
+.orbit::before { content: '🌍'; font-size: 24px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.orbit::after { content: ''; position: absolute; inset: 0; border: 2px solid transparent; border-top-color: var(--accent); border-right-color: var(--accent2); border-radius: 50%; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { color: var(--muted); font-size: 14px; font-family: var(--mono); }
+
+/* ERROR */
+.error-box { background: rgba(247,95,95,0.1); border: 1px solid rgba(247,95,95,0.3); border-radius: 10px; padding: 16px 20px; color: var(--red); font-size: 13px; margin-bottom: 20px; }
+
+/* SECTION LABEL */
+.section-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; margin: 28px 0 14px; display: flex; align-items: center; gap: 10px; }
+.section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* KPI STRIP */
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 4px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden; }
+.kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--kpi-color, var(--accent)); }
+.kpi-icon { font-size: 22px; margin-bottom: 8px; }
+.kpi-val { font-family: var(--mono); font-size: 28px; font-weight: 500; color: var(--kpi-color, var(--accent)); line-height: 1; }
+.kpi-label { font-size: 12px; color: var(--muted); margin-top: 6px; font-weight: 500; }
+
+/* GRIDS */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid-3 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid-3r { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; margin-bottom: 16px; }
+@media(max-width:768px) { .grid-2,.grid-3,.grid-3r { grid-template-columns: 1fr; } }
+
+/* PANEL */
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; }
+.panel-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.panel-sub { font-size: 11px; color: var(--muted); margin-bottom: 18px; }
+
+/* APOD */
+.apod-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+.apod-img { width: 100%; height: 280px; object-fit: cover; display: block; }
+.apod-body { padding: 18px 20px; }
+.apod-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.apod-date { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-bottom: 10px; }
+.apod-desc { font-size: 12px; color: var(--muted); line-height: 1.7; max-height: 100px; overflow: hidden; }
+.apod-copyright { font-size: 10px; color: var(--muted); margin-top: 8px; font-family: var(--mono); }
+
+/* ASTEROID TABLE */
+.asteroid-table { width: 100%; border-collapse: collapse; }
+.asteroid-table th { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.asteroid-table td { padding: 9px 12px; border-bottom: 1px solid rgba(30,42,74,0.5); font-size: 12px; font-family: var(--mono); }
+.asteroid-table tr:last-child td { border-bottom: none; }
+.asteroid-table tr:hover td { background: rgba(79,142,247,0.05); }
+.hazard-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
+.hazard-yes { background: rgba(247,95,95,0.15); color: var(--red); border: 1px solid rgba(247,95,95,0.3); }
+.hazard-no { background: rgba(34,211,165,0.1); color: var(--green); border: 1px solid rgba(34,211,165,0.2); }
+
+/* EVENT LIST */
+.event-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(30,42,74,0.5); }
+.event-item:last-child { border-bottom: none; }
+.event-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.event-name { font-size: 13px; color: var(--text); flex: 1; }
+.event-cat { font-size: 10px; font-family: var(--mono); color: var(--muted); }
+.event-date { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+
+/* WEEK GALLERY */
+.week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.week-thumb { border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: border-color .2s; aspect-ratio: 1; }
+.week-thumb:hover { border-color: var(--accent); }
+.week-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.week-thumb .thumb-label { font-size: 9px; color: var(--muted); font-family: var(--mono); padding: 3px 4px; text-align: center; background: var(--surface2); }
+
+/* STAT ROW */
+.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(30,42,74,0.5); }
+.stat-row:last-child { border-bottom: none; }
+.stat-name { font-size: 13px; color: var(--text); }
+.stat-val { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+
+/* TOOLTIP */
+.chart-tip { background: #0a0e1f !important; border: 1px solid #1e2a4a !important; border-radius: 8px !important; color: #e8eaf6 !important; }
+</style>
+</head>
+<body>
+
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker-inner" id="ticker">
+    <span>🚀 Welcome to <b>CosmosBoard</b> — NASA Space Intelligence Dashboard</span>
+    <span>☄️ Real-time <b>Asteroid Tracker</b> powered by NASA NeoWs API</span>
+    <span>🌌 <b>Astronomy Picture of the Day</b> updated every 24 hours</span>
+    <span>🌪️ Live <b>Natural Events</b> — wildfires, storms, volcanoes tracked globally</span>
+    <span>🚀 Welcome to <b>CosmosBoard</b> — NASA Space Intelligence Dashboard</span>
+    <span>☄️ Real-time <b>Asteroid Tracker</b> powered by NASA NeoWs API</span>
+    <span>🌌 <b>Astronomy Picture of the Day</b> updated every 24 hours</span>
+    <span>🌪️ Live <b>Natural Events</b> — wildfires, storms, volcanoes tracked globally</span>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🔭</div>
+    <div>
+      <div class="logo-text">CosmosBoard</div>
+      <div class="logo-sub">NASA Space Intelligence Dashboard</div>
+    </div>
+    <span class="live-pill" id="livePill">● LIVE</span>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <button class="btn-load" id="loadBtn" onclick="loadAll()">🚀 Launch Dashboard</button>
+  </div>
+</header>
+
+<!-- TABS -->
+<div class="tabs" id="tabs">
+  <button class="tab-btn active" onclick="switchTab('overview')">🌌 Overview</button>
+  <button class="tab-btn" onclick="switchTab('asteroids')">☄️ Asteroids</button>
+  <button class="tab-btn" onclick="switchTab('apod')">📸 Space Gallery</button>
+  <button class="tab-btn" onclick="switchTab('events')">🌪️ Earth Events</button>
+</div>
+
+<!-- MAIN -->
+<div class="main" id="main">
+  <div class="empty-state">
+    <div class="empty-icon">🔭</div>
+    <div class="empty-title">CosmosBoard</div>
+    <div class="empty-sub">Your real-time NASA Space Intelligence Dashboard. Live asteroid tracking, Earth natural events, daily space photography — all powered by NASA's open APIs.</div>
+    <button class="btn-load" onclick="loadAll()" style="padding:12px 32px;font-size:14px;margin-top:8px">🚀 Launch Dashboard</button>
+    <div style="font-size:11px;color:var(--muted);font-family:var(--mono)">Powered by NASA Open APIs · No auth required</div>
+  </div>
+</div>
+
+<script>
+const COLORS = ['#4f8ef7','#7c5cfc','#22d3a5','#f7a24f','#f75f5f','#f7e24f','#5cf7c8','#c85cf7'];
+const EVENT_COLORS = { 'Wildfires':'#f75f5f', 'Severe Storms':'#f7a24f', 'Volcanoes':'#f7e24f', 'Sea and Lake Ice':'#4f8ef7', 'Icebergs':'#7c5cfc', 'Earthquakes':'#22d3a5', 'Floods':'#5cf7c8', 'Landslides':'#c85cf7', 'Default':'#6b7bb0' };
+let charts = [], cached = {}, currentTab = 'overview';
+
+const tipStyle = {
+  backgroundColor:'#0a0e1f', borderColor:'#1e2a4a', borderWidth:1,
+  titleColor:'#e8eaf6', bodyColor:'#6b7bb0',
+  titleFont:{family:'DM Mono',size:11}, bodyFont:{family:'DM Mono',size:11}, padding:10, cornerRadius:8
+};
+
+function destroyCharts() { charts.forEach(c=>c.destroy()); charts=[]; }
+
+function fmt(n, decimals=0) {
+  if (n == null) return '—';
+  if (n >= 1e6) return (n/1e6).toFixed(1)+'M km';
+  if (n >= 1e3) return (n/1e3).toFixed(decimals)+'k';
+  return n.toFixed(decimals);
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['overview','asteroids','apod','events'][i] === tab);
+  });
+  if (Object.keys(cached).length) renderTab(tab);
+}
+
+async function loadAll() {
+  const btn = document.getElementById('loadBtn');
+  btn.disabled = true; btn.textContent = '⏳ Loading…';
+  document.getElementById('tabs').style.display = 'none';
+  document.getElementById('main').innerHTML = `
+    <div class="loading-state">
+      <div class="orbit"></div>
+      <div class="loading-text">Contacting NASA APIs…</div>
+      <div style="font-size:11px;color:#3a4a70;font-family:var(--mono);margin-top:4px">Fetching asteroids · APOD · Earth events</div>
+    </div>`;
+  destroyCharts();
+
+  try {
+    const [apod, asteroids, eonet, apodWeek] = await Promise.all([
+      fetch('/api/nasa?type=apod').then(r=>r.json()),
+      fetch('/api/nasa?type=asteroids').then(r=>r.json()),
+      fetch('/api/nasa?type=eonet').then(r=>r.json()),
+      fetch('/api/nasa?type=apod_week').then(r=>r.json()),
+    ]);
+
+    if (apod.error || asteroids.error) throw new Error(apod.error || asteroids.error);
+
+    cached = { apod, asteroids, eonet, apodWeek };
+
+    // Update ticker
+    const tickItems = [
+      `☄️ Asteroids this week: <b>${asteroids.total}</b>`,
+      `⚠️ Potentially hazardous: <b>${asteroids.hazardous}</b>`,
+      `✅ Safe flybys: <b>${asteroids.safe}</b>`,
+      `🌪️ Active Earth events: <b>${eonet.total}</b>`,
+      `📸 Today's APOD: <b>${apod.title}</b>`,
+      `🔭 Closest asteroid: <b>${asteroids.asteroids?.[0]?.name}</b>`,
+    ];
+    const doubled = [...tickItems,...tickItems].map(t=>`<span>${t}</span>`).join('');
+    document.getElementById('ticker').innerHTML = doubled;
+    document.getElementById('livePill').style.display = 'inline';
+    document.getElementById('tabs').style.display = 'flex';
+
+    renderTab('overview');
+  } catch(e) {
+    document.getElementById('main').innerHTML = `
+      <div class="error-box">⚠ ${e.message || 'Failed to load NASA data. Try again.'}</div>
+      <div class="empty-state" style="min-height:200px">
+        <button class="btn-load" onclick="loadAll()">↻ Retry</button>
+      </div>`;
+    document.getElementById('tabs').style.display = 'none';
+  }
+
+  btn.disabled = false; btn.textContent = '↻ Refresh';
+}
+
+function renderTab(tab) {
+  destroyCharts();
+  if (tab === 'overview') renderOverview();
+  else if (tab === 'asteroids') renderAsteroids();
+  else if (tab === 'apod') renderAPOD();
+  else if (tab === 'events') renderEvents();
+}
+
+// ── OVERVIEW ──────────────────────────────────────────────────
+function renderOverview() {
+  const { apod, asteroids, eonet } = cached;
+  const closest = asteroids.asteroids?.[0];
+  const fastest = [...(asteroids.asteroids||[])].sort((a,b)=>b.velocity-a.velocity)[0];
+  const largest = [...(asteroids.asteroids||[])].sort((a,b)=>b.diameterMax-a.diameterMax)[0];
+
+  document.getElementById('main').innerHTML = `
+    <!-- KPIs -->
+    <div class="section-label">Mission Status</div>
+    <div class="kpi-strip">
+      <div class="kpi" style="--kpi-color:#f75f5f">
+        <div class="kpi-icon">☄️</div>
+        <div class="kpi-val">${asteroids.total}</div>
+        <div class="kpi-label">Asteroids This Week</div>
+      </div>
+      <div class="kpi" style="--kpi-color:#f7a24f">
+        <div class="kpi-icon">⚠️</div>
+        <div class="kpi-val">${asteroids.hazardous}</div>
+        <div class="kpi-label">Potentially Hazardous</div>
+      </div>
+      <div class="kpi" style="--kpi-color:#22d3a5">
+        <div class="kpi-icon">✅</div>
+        <div class="kpi-val">${asteroids.safe}</div>
+        <div class="kpi-label">Safe Flybys</div>
+      </div>
+      <div class="kpi" style="--kpi-color:#4f8ef7">
+        <div class="kpi-icon">🌪️</div>
+        <div class="kpi-val">${eonet.total}</div>
+        <div class="kpi-label">Active Earth Events</div>
+      </div>
+      <div class="kpi" style="--kpi-color:#7c5cfc">
+        <div class="kpi-icon">🏃</div>
+        <div class="kpi-val">${fastest ? Math.round(fastest.velocity/1000)+'k' : '—'}</div>
+        <div class="kpi-label">Fastest km/h</div>
+      </div>
+      <div class="kpi" style="--kpi-color:#f7e24f">
+        <div class="kpi-icon">📐</div>
+        <div class="kpi-val">${largest ? Math.round(largest.diameterMax)+'m' : '—'}</div>
+        <div class="kpi-label">Largest Asteroid</div>
+      </div>
+    </div>
+
+    <!-- APOD + Asteroid Bar -->
+    <div class="section-label">Today's Universe</div>
+    <div class="grid-3">
+      <div class="apod-card">
+        ${apod.media_type === 'image'
+          ? `<img class="apod-img" src="${apod.url}" alt="${apod.title}" onerror="this.style.display='none'"/>`
+          : `<div style="height:280px;background:linear-gradient(135deg,#0a0e1f,#1a0a33);display:flex;align-items:center;justify-content:center;font-size:48px">🎬</div>`}
+        <div class="apod-body">
+          <div class="apod-title">${apod.title}</div>
+          <div class="apod-date">📅 ${apod.date} · NASA APOD</div>
+          <div class="apod-desc">${apod.explanation}</div>
+          ${apod.copyright ? `<div class="apod-copyright">© ${apod.copyright}</div>` : ''}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Asteroids Per Day</div>
+        <div class="panel-sub">Number of near-Earth objects daily this week (bar chart)</div>
+        <div style="height:200px"><canvas id="asteroidDayChart"></canvas></div>
+        <div style="margin-top:16px">
+          <div class="panel-title" style="margin-bottom:12px">Closest Approach</div>
+          ${closest ? `
+            <div class="stat-row"><span class="stat-name">🪨 Name</span><span class="stat-val" style="font-size:11px">${closest.name}</span></div>
+            <div class="stat-row"><span class="stat-name">📏 Distance</span><span class="stat-val">${(closest.missDistanceKm/1000).toFixed(0)}k km</span></div>
+            <div class="stat-row"><span class="stat-name">🏃 Velocity</span><span class="stat-val">${Math.round(closest.velocity).toLocaleString()} km/h</span></div>
+            <div class="stat-row"><span class="stat-name">⚠️ Hazard</span><span class="stat-val" style="color:${closest.isHazardous?'#f75f5f':'#22d3a5'}">${closest.isHazardous?'YES':'NO'}</span></div>
+          ` : '<div style="color:var(--muted);font-size:13px">No data</div>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="section-label">Threat Analysis & Earth Watch</div>
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-title">Hazard Distribution</div>
+        <div class="panel-sub">Safe vs potentially hazardous asteroids this week (donut)</div>
+        <div style="height:200px"><canvas id="hazardDonut"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Active Earth Events by Type</div>
+        <div class="panel-sub">Live natural events tracked by NASA EONET (horizontal bar)</div>
+        <div style="height:200px"><canvas id="eonetBar"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Velocity scatter feel + size bar -->
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-title">Top 10 Fastest Asteroids</div>
+        <div class="panel-sub">Velocity in km/h for closest approaching objects (bar chart)</div>
+        <div style="height:220px"><canvas id="velocityBar"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Asteroid Size Comparison</div>
+        <div class="panel-sub">Estimated max diameter in meters (horizontal bar)</div>
+        <div style="height:220px"><canvas id="sizeBar"></canvas></div>
+      </div>
+    </div>
+  `;
+
+  setTimeout(() => {
+    // Asteroid per day bar
+    const adc = document.getElementById('asteroidDayChart')?.getContext('2d');
+    if (adc) charts.push(new Chart(adc, {
+      type:'bar',
+      data:{ labels: asteroids.byDay.map(d=>d.date), datasets:[
+        { label:'Safe', data: asteroids.byDay.map(d=>d.count-d.hazardous), backgroundColor:'rgba(34,211,165,0.6)', borderRadius:4, borderWidth:0 },
+        { label:'Hazardous', data: asteroids.byDay.map(d=>d.hazardous), backgroundColor:'rgba(247,95,95,0.7)', borderRadius:4, borderWidth:0 },
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:true,labels:{color:'#6b7bb0',font:{family:'DM Mono',size:10},boxWidth:10}}, tooltip:tipStyle },
+        scales:{ x:{stacked:true,grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}}, y:{stacked:true,grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}} } }
+    }));
+
+    // Hazard donut
+    const hd = document.getElementById('hazardDonut')?.getContext('2d');
+    if (hd) charts.push(new Chart(hd, {
+      type:'doughnut',
+      data:{ labels:['Safe','Hazardous'], datasets:[{ data:[asteroids.safe, asteroids.hazardous], backgroundColor:['rgba(34,211,165,0.7)','rgba(247,95,95,0.7)'], borderColor:['#22d3a5','#f75f5f'], borderWidth:1, hoverOffset:8 }]},
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'65%',
+        plugins:{ legend:{display:true,position:'right',labels:{color:'#6b7bb0',font:{family:'DM Mono',size:11},boxWidth:10}}, tooltip:tipStyle } }
+    }));
+
+    // EONET bar
+    const eb = document.getElementById('eonetBar')?.getContext('2d');
+    if (eb && eonet.byCategory) charts.push(new Chart(eb, {
+      type:'bar',
+      data:{ labels: eonet.byCategory.map(c=>c.name), datasets:[{ data: eonet.byCategory.map(c=>c.count), backgroundColor: eonet.byCategory.map(c=>EVENT_COLORS[c.name]||EVENT_COLORS.Default), borderRadius:4, borderWidth:0 }]},
+      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:tipStyle},
+        scales:{ x:{grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}}, y:{grid:{display:false},ticks:{color:'#8899cc',font:{family:'DM Mono',size:11}}} } }
+    }));
+
+    // Velocity bar
+    const vb = document.getElementById('velocityBar')?.getContext('2d');
+    const top10velocity = [...(asteroids.asteroids||[])].sort((a,b)=>b.velocity-a.velocity).slice(0,10);
+    if (vb) charts.push(new Chart(vb, {
+      type:'bar',
+      data:{ labels: top10velocity.map(a=>a.name.replace(/[()]/g,'').slice(0,16)), datasets:[{ data: top10velocity.map(a=>Math.round(a.velocity)), backgroundColor: top10velocity.map(a=>a.isHazardous?'rgba(247,95,95,0.7)':'rgba(79,142,247,0.6)'), borderRadius:4, borderWidth:0 }]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{...tipStyle,callbacks:{label:ctx=>`${ctx.raw.toLocaleString()} km/h`}}},
+        scales:{ x:{grid:{display:false},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:9},maxRotation:45}}, y:{grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}} } }
+    }));
+
+    // Size bar
+    const sb = document.getElementById('sizeBar')?.getContext('2d');
+    const top10size = [...(asteroids.asteroids||[])].sort((a,b)=>b.diameterMax-a.diameterMax).slice(0,10);
+    if (sb) charts.push(new Chart(sb, {
+      type:'bar',
+      data:{ labels: top10size.map(a=>a.name.replace(/[()]/g,'').slice(0,16)), datasets:[{ data: top10size.map(a=>Math.round(a.diameterMax)), backgroundColor:'rgba(124,92,252,0.6)', borderRadius:4, borderWidth:0 }]},
+      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{...tipStyle,callbacks:{label:ctx=>`${ctx.raw.toLocaleString()} meters`}}},
+        scales:{ x:{grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}}, y:{grid:{display:false},ticks:{color:'#8899cc',font:{family:'DM Mono',size:10}}} } }
+    }));
+  }, 50);
+}
+
+// ── ASTEROIDS TAB ──────────────────────────────────────────────
+function renderAsteroids() {
+  const { asteroids } = cached;
+  document.getElementById('main').innerHTML = `
+    <div class="section-label">Asteroid Intelligence — This Week</div>
+    <div class="grid-2" style="margin-bottom:16px">
+      <div class="panel">
+        <div class="panel-title">Miss Distance vs Velocity</div>
+        <div class="panel-sub">Each point = one asteroid. Red = hazardous. (bubble-style scatter)</div>
+        <div style="height:260px"><canvas id="scatterChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Daily Asteroid Count</div>
+        <div class="panel-sub">Stacked: safe (green) vs hazardous (red) per day (area chart)</div>
+        <div style="height:260px"><canvas id="areaChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-title">All Near-Earth Objects This Week</div>
+      <div class="panel-sub">Sorted by closest approach to Earth · Red = potentially hazardous</div>
+      <div style="overflow-x:auto">
+        <table class="asteroid-table">
+          <thead><tr>
+            <th>Name</th><th>Date</th><th>Diameter (m)</th>
+            <th>Miss Distance</th><th>Lunar Distance</th><th>Velocity (km/h)</th><th>Hazard</th>
+          </tr></thead>
+          <tbody>
+            ${(asteroids.asteroids||[]).map(a=>`
+              <tr>
+                <td style="color:${a.isHazardous?'#f75f5f':'#e8eaf6'};max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</td>
+                <td>${a.date||'—'}</td>
+                <td>${Math.round(a.diameterMin)}–${Math.round(a.diameterMax)}</td>
+                <td style="color:#4f8ef7">${(a.missDistanceKm/1000).toFixed(0)}k km</td>
+                <td style="color:#7c5cfc">${a.missDistanceLunar.toFixed(1)} LD</td>
+                <td style="color:#22d3a5">${Math.round(a.velocity).toLocaleString()}</td>
+                <td><span class="hazard-badge ${a.isHazardous?'hazard-yes':'hazard-no'}">${a.isHazardous?'⚠ YES':'✓ SAFE'}</span></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  setTimeout(() => {
+    // Scatter: miss distance vs velocity
+    const sc = document.getElementById('scatterChart')?.getContext('2d');
+    if (sc) {
+      const scatterData = (asteroids.asteroids||[]).map(a=>({
+        x: parseFloat((a.missDistanceKm/1e6).toFixed(2)),
+        y: Math.round(a.velocity/1000),
+        r: Math.max(4, Math.min(20, a.diameterMax/50)),
+        name: a.name, hazard: a.isHazardous
+      }));
+      charts.push(new Chart(sc, {
+        type:'bubble',
+        data:{ datasets:[
+          { label:'Safe', data: scatterData.filter(d=>!d.hazard), backgroundColor:'rgba(34,211,165,0.5)', borderColor:'#22d3a5', borderWidth:1 },
+          { label:'Hazardous', data: scatterData.filter(d=>d.hazard), backgroundColor:'rgba(247,95,95,0.6)', borderColor:'#f75f5f', borderWidth:1 },
+        ]},
+        options:{ responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{display:true,labels:{color:'#6b7bb0',font:{family:'DM Mono',size:10},boxWidth:10}}, tooltip:{...tipStyle,callbacks:{label:ctx=>`${ctx.raw.name||''} · ${ctx.raw.y}k km/h`}} },
+          scales:{ x:{title:{display:true,text:'Miss Distance (M km)',color:'#6b7bb0',font:{family:'DM Mono',size:10}},grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}},
+            y:{title:{display:true,text:'Velocity (k km/h)',color:'#6b7bb0',font:{family:'DM Mono',size:10}},grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}} } }
+      }));
+    }
+
+    // Area chart by day
+    const ac = document.getElementById('areaChart')?.getContext('2d');
+    if (ac) {
+      const grad1 = ac.createLinearGradient(0,0,0,260); grad1.addColorStop(0,'rgba(34,211,165,0.3)'); grad1.addColorStop(1,'rgba(34,211,165,0)');
+      const grad2 = ac.createLinearGradient(0,0,0,260); grad2.addColorStop(0,'rgba(247,95,95,0.3)'); grad2.addColorStop(1,'rgba(247,95,95,0)');
+      charts.push(new Chart(ac, {
+        type:'line',
+        data:{ labels: asteroids.byDay.map(d=>d.date), datasets:[
+          { label:'Safe', data: asteroids.byDay.map(d=>d.count-d.hazardous), fill:true, backgroundColor:grad1, borderColor:'#22d3a5', borderWidth:2, tension:.4, pointRadius:4, pointBackgroundColor:'#22d3a5' },
+          { label:'Hazardous', data: asteroids.byDay.map(d=>d.hazardous), fill:true, backgroundColor:grad2, borderColor:'#f75f5f', borderWidth:2, tension:.4, pointRadius:4, pointBackgroundColor:'#f75f5f' },
+        ]},
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true,labels:{color:'#6b7bb0',font:{family:'DM Mono',size:10},boxWidth:10}},tooltip:tipStyle},
+          scales:{ x:{grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}}, y:{grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}} } }
+      }));
+    }
+  }, 50);
+}
+
+// ── APOD GALLERY TAB ──────────────────────────────────────────
+function renderAPOD() {
+  const { apod, apodWeek } = cached;
+  const week = Array.isArray(apodWeek) ? apodWeek : [apod];
+  document.getElementById('main').innerHTML = `
+    <div class="section-label">Astronomy Picture of the Day — This Week</div>
+    <div class="week-grid" style="margin-bottom:24px">
+      ${week.map((p,i)=>`
+        <div class="week-thumb" onclick="showApodFull(${i})" title="${p.title}">
+          ${p.media_type==='image'
+            ? `<img src="${p.url}" alt="${p.title}" style="width:100%;height:80px;object-fit:cover"/>`
+            : `<div style="height:80px;background:linear-gradient(135deg,#0a0e1f,#1a0a33);display:flex;align-items:center;justify-content:center;font-size:24px">🎬</div>`}
+          <div class="thumb-label">${p.date?.slice(5)||''}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="grid-3r">
+      <div>
+        <div class="panel" style="margin-bottom:16px">
+          <div class="panel-title">Media Types This Week</div>
+          <div class="panel-sub">Image vs video breakdown (donut)</div>
+          <div style="height:160px"><canvas id="mediaDonut"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">This Week's Titles</div>
+          <div class="panel-sub">All 7 APOD entries</div>
+          ${week.map(p=>`
+            <div class="stat-row">
+              <span class="stat-name" style="font-size:11px">${p.date?.slice(5)||''}</span>
+              <span style="font-size:11px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.title}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div class="apod-card">
+        ${apod.media_type==='image'
+          ? `<img src="${apod.hdurl||apod.url}" alt="${apod.title}" style="width:100%;max-height:500px;object-fit:cover"/>`
+          : `<iframe src="${apod.url}" style="width:100%;height:400px;border:none"></iframe>`}
+        <div class="apod-body">
+          <div class="apod-title">${apod.title}</div>
+          <div class="apod-date">📅 ${apod.date} · NASA APOD</div>
+          <div class="apod-desc" style="max-height:none">${apod.explanation}</div>
+          ${apod.copyright?`<div class="apod-copyright">© ${apod.copyright}</div>`:''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  setTimeout(()=>{
+    const images = week.filter(p=>p.media_type==='image').length;
+    const videos = week.length - images;
+    const md = document.getElementById('mediaDonut')?.getContext('2d');
+    if (md) charts.push(new Chart(md,{
+      type:'doughnut',
+      data:{ labels:['Images','Videos'], datasets:[{data:[images,videos],backgroundColor:['rgba(79,142,247,0.7)','rgba(124,92,252,0.7)'],borderColor:['#4f8ef7','#7c5cfc'],borderWidth:1,hoverOffset:6}]},
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{legend:{display:true,position:'right',labels:{color:'#6b7bb0',font:{family:'DM Mono',size:11},boxWidth:10}},tooltip:tipStyle} }
+    }));
+  },50);
+}
+
+function showApodFull(i) {
+  const week = Array.isArray(cached.apodWeek) ? cached.apodWeek : [cached.apod];
+  const p = week[i];
+  if (!p) return;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;cursor:pointer';
+  overlay.innerHTML = `<div style="max-width:700px;width:100%;background:#0a0e1f;border:1px solid #1e2a4a;border-radius:16px;overflow:hidden">
+    ${p.media_type==='image'?`<img src="${p.hdurl||p.url}" style="width:100%;max-height:500px;object-fit:cover"/>`:``}
+    <div style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:6px">${p.title}</div>
+    <div style="font-size:11px;color:#4f8ef7;font-family:monospace;margin-bottom:10px">${p.date}</div>
+    <div style="font-size:12px;color:#6b7bb0;line-height:1.7">${p.explanation}</div></div></div>`;
+  overlay.onclick = ()=>overlay.remove();
+  document.body.appendChild(overlay);
+}
+
+// ── EVENTS TAB ────────────────────────────────────────────────
+function renderEvents() {
+  const { eonet } = cached;
+  document.getElementById('main').innerHTML = `
+    <div class="section-label">Active Natural Events — Live from NASA EONET</div>
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-title">Events by Category</div>
+        <div class="panel-sub">Distribution of active natural events globally (donut)</div>
+        <div style="height:260px"><canvas id="eventDonut"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Event Volume</div>
+        <div class="panel-sub">Count per event type (bar chart)</div>
+        <div style="height:260px"><canvas id="eventBar"></canvas></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Live Event Feed</div>
+      <div class="panel-sub">Most recent active events from NASA Earth Observatory</div>
+      <div>
+        ${(eonet.events||[]).map(e=>`
+          <div class="event-item">
+            <div class="event-dot" style="background:${EVENT_COLORS[e.category]||EVENT_COLORS.Default}"></div>
+            <div>
+              <div class="event-name">${e.title}</div>
+              <div class="event-cat">${e.category}</div>
+            </div>
+            <div class="event-date">${e.date||'—'}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+
+  setTimeout(()=>{
+    const cats = eonet.byCategory||[];
+    const ec = document.getElementById('eventDonut')?.getContext('2d');
+    if (ec) charts.push(new Chart(ec,{
+      type:'doughnut',
+      data:{ labels:cats.map(c=>c.name), datasets:[{data:cats.map(c=>c.count),backgroundColor:cats.map(c=>EVENT_COLORS[c.name]||EVENT_COLORS.Default),borderWidth:0,hoverOffset:8}]},
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'55%', plugins:{legend:{display:true,position:'right',labels:{color:'#6b7bb0',font:{family:'DM Mono',size:10},boxWidth:8}},tooltip:tipStyle} }
+    }));
+
+    const eb = document.getElementById('eventBar')?.getContext('2d');
+    if (eb) charts.push(new Chart(eb,{
+      type:'bar',
+      data:{ labels:cats.map(c=>c.name), datasets:[{data:cats.map(c=>c.count),backgroundColor:cats.map(c=>EVENT_COLORS[c.name]||EVENT_COLORS.Default),borderRadius:6,borderWidth:0}]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:tipStyle},
+        scales:{ x:{grid:{display:false},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10},maxRotation:30}}, y:{grid:{color:'rgba(30,42,74,0.5)'},ticks:{color:'#6b7bb0',font:{family:'DM Mono',size:10}}} } }
+    }));
+  },50);
+}
+</script>
+</body>
+</html>

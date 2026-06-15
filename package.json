@@ -1,0 +1,6 @@
+{
+  "name": "cosmosboard",
+  "version": "1.0.0",
+  "description": "NASA Space Intelligence Dashboard",
+  "engines": { "node": "18.x" }
+}
