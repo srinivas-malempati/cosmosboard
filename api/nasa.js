@@ -6,10 +6,23 @@ export default async function handler(req, res) {
   const API_KEY = process.env.NASA_API_KEY || "DEMO_KEY";
   const { type } = req.query;
 
+  const safeFetch = async (url) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const r = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      clearTimeout(timeout);
+      throw new Error(`Fetch failed for ${url}: ${e.message}`);
+    }
+  };
+
   try {
     if (type === "apod") {
-      const r = await fetch(`https://api.nasa.gov/planetary/apod?api_key=${API_KEY}`);
-      const d = await r.json();
+      const d = await safeFetch(`https://api.nasa.gov/planetary/apod?api_key=${API_KEY}`);
       return res.status(200).json(d);
     }
 
@@ -17,10 +30,8 @@ export default async function handler(req, res) {
       const today = new Date();
       const end = today.toISOString().slice(0, 10);
       const start = new Date(today - 7 * 86400000).toISOString().slice(0, 10);
-      const r = await fetch(`https://api.nasa.gov/neo/rest/v1/feed?start_date=${start}&end_date=${end}&api_key=${API_KEY}`);
-      const d = await r.json();
+      const d = await safeFetch(`https://api.nasa.gov/neo/rest/v1/feed?start_date=${start}&end_date=${end}&api_key=${API_KEY}`);
 
-      // Flatten all asteroids
       const all = Object.values(d.near_earth_objects || {}).flat();
       const asteroids = all.map(a => ({
         id: a.id,
@@ -48,8 +59,7 @@ export default async function handler(req, res) {
     }
 
     if (type === "eonet") {
-      const r = await fetch(`https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50`);
-      const d = await r.json();
+      const d = await safeFetch(`https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50`);
       const events = (d.events || []).map(e => ({
         id: e.id,
         title: e.title,
@@ -72,13 +82,13 @@ export default async function handler(req, res) {
         dates.push(d.toISOString().slice(0, 10));
       }
       const start = dates[0], end = dates[dates.length - 1];
-      const r = await fetch(`https://api.nasa.gov/planetary/apod?api_key=${API_KEY}&start_date=${start}&end_date=${end}`);
-      const d = await r.json();
+      const d = await safeFetch(`https://api.nasa.gov/planetary/apod?api_key=${API_KEY}&start_date=${start}&end_date=${end}`);
       return res.status(200).json(Array.isArray(d) ? d : [d]);
     }
 
     return res.status(400).json({ error: "Unknown type" });
+
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: e.message || "NASA API error" });
   }
 }
